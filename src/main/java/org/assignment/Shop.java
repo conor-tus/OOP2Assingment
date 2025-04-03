@@ -1,11 +1,26 @@
 package org.assignment;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.stream.Collectors;
+
 
 public class Shop {
 
+    private static final ExecutorService executorService = Executors.newFixedThreadPool(3);
+
     private List<Product> basket;
+    private static final Path FILE_DIRECTORY = Paths.get("receipts");
+    static final List<String> FILE_NAMES = List.of("CustomerReceipt.txt","ShopReceipt.txt");
 
     public Shop(){
         this.basket = new ArrayList<>();
@@ -16,9 +31,8 @@ public class Shop {
     }
 
     public void addMultipleProductsToBasket(Product... product){
-        for(Product p : product){
-            this.basket.add(p);
-        }
+        this.basket.addAll(Arrays.asList(product));
+        this.basket.sort(Comparator.comparing(Product::getName));
     }
 
     public void removeProductFromBasket(Product p){
@@ -79,7 +93,48 @@ public class Shop {
         }
     }
 
+    public static void createReceiptFiles(ResourceBundle messages) throws IOException {
+        for (String filename : FILE_NAMES) {
+            Path filePath = FILE_DIRECTORY.resolve(filename);
+            if (!Files.exists(filePath)) {
+                String content = messages.getString("fileContent") + filename; // Sample content
+                Files.write(filePath, content.getBytes(StandardCharsets.UTF_8));
+                System.out.println(messages.getString("fileCreated") + filename);
+            }
+        }
+    }
+
+    public static void processFile(String filename,String fileContent, ResourceBundle messages) throws IOException {
+        Path filePath = FILE_DIRECTORY.resolve(filename);
+
+        // Read file content
+        String content = Files.readString(filePath, StandardCharsets.UTF_8);
+        System.out.println(messages.getString("processingFile") + filename);
+
+        // Simulate processing: Uppercase the content
+        String processedContent = content.toUpperCase();
+
+        // Write the processed content to another file
+        Path processedFile = FILE_DIRECTORY.resolve("processed_" + filename);
+        Files.write(processedFile, processedContent.getBytes(StandardCharsets.UTF_8));
+        String updatedContent = "";
+        if (filename.contains("Customer")) {
+            updatedContent = "This is the Customers receipt" + fileContent;
+        }
+        else if (filename.contains("Shop")) {
+            updatedContent = "This is the Shops receipt" + fileContent;
+        }
+        Files.write(processedFile, updatedContent.getBytes(StandardCharsets.UTF_8));
+        System.out.println(messages.getString("fileProcessed") + processedFile.getFileName());
+    }
+
     public static void main(String[] args) {
+
+        Locale local = Locale.getDefault();
+
+        
+        //Locale locale = new Locale("ga", "IE");
+        ResourceBundle messages = ResourceBundle.getBundle("Messages", local);
 
         Shop shop = new Shop();
         Electronics Nintendo = new Electronics("Switch",40.0);
@@ -100,10 +155,59 @@ public class Shop {
         DiscountElectronics de = new DiscountElectronics();
         de.discountProduct(shop.getBasket(),41);
 
-        Receipt receipt = shop.buyBasket(50);
+        Receipt receipt = shop.buyBasket(100);
 
 
         System.out.println(shop);
         System.out.println(receipt.formattedReceipt());
+
+        // Create the directory if it doesn't exist
+        try {
+            Files.createDirectories(Paths.get("receipts"));
+        } catch (IOException e) {
+            System.err.println(messages.getString("error.creatingDirectory"));
+            return;
+        }
+
+        // Create test files
+        try {
+            createReceiptFiles(messages);
+        } catch (IOException e) {
+            System.err.println(messages.getString("error.creatingFiles"));
+            return;
+        }
+
+        // Start processing the files concurrently using Callable tasks
+        List<Callable<Void>> tasks = FILE_NAMES.stream()
+                .map(filename -> (Callable<Void>) () -> {
+                    try {
+                        processFile(filename, receipt.formattedReceipt(),messages);
+                    } catch (IOException e) {
+                        System.err.println(messages.getString("error.processingFile") + filename);
+                    }
+                    return null;
+                })
+                .collect(Collectors.toList());
+
+        try {
+            // Submit tasks to ExecutorService and wait for completion
+            List<Future<Void>> futures = executorService.invokeAll(tasks);
+
+            // Wait for all tasks to complete and handle results
+            for (Future<Void> future : futures) {
+                try {
+                    future.get();
+                } catch (ExecutionException e) {
+                    System.err.println(messages.getString("error.execution"));
+                }
+            }
+
+            System.out.println(messages.getString("allTasksCompleted"));
+        } catch (InterruptedException e) {
+            System.err.println(messages.getString("error.executorInterrupted"));
+        } finally {
+            executorService.shutdown();
+        }
     }
+
 }
