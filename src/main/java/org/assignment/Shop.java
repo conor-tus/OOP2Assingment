@@ -89,6 +89,7 @@ public class Shop {
                 case "Xbox" -> System.out.println("Free game! Xbox fifa 2025");
                 case "Switch" -> System.out.println("Free game! Switch fifa 2025");
                 case "Playstation" -> System.out.println("Free game! Playstation fifa 2025");
+                case String _ -> System.out.println("Extra system found, noting error");
             }
         }
     }
@@ -130,10 +131,9 @@ public class Shop {
 
     public static void main(String[] args) {
 
-        Locale local = Locale.getDefault();
+        //Locale local = Locale.getDefault();
 
-        
-        //Locale locale = new Locale("ga", "IE");
+        Locale local = new Locale("ga", "IE");
         ResourceBundle messages = ResourceBundle.getBundle("Messages", local);
 
         Shop shop = new Shop();
